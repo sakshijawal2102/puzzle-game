@@ -1,0 +1,420 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fun Puzzle Game</title>
+
+<style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    background: linear-gradient(135deg,#667eea,#764ba2,#f093fb);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+.container {
+    background: white;
+    width: 100%;
+    max-width: 450px;
+    padding: 25px;
+    border-radius: 25px;
+    text-align: center;
+    box-shadow: 0 15px 40px rgba(0,0,0,.25);
+}
+
+h1 {
+    color: #764ba2;
+    margin-bottom: 8px;
+}
+
+.subtitle {
+    color: #777;
+    margin-bottom: 20px;
+}
+
+.stats {
+    display: flex;
+    justify-content: space-around;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.stat {
+    background: #f1eaff;
+    padding: 12px;
+    border-radius: 12px;
+    flex: 1;
+}
+
+.stat h3 {
+    color: #764ba2;
+    font-size: 22px;
+}
+
+.stat p {
+    font-size: 12px;
+    color: #666;
+}
+
+.board {
+    display: grid;
+    grid-template-columns: repeat(3,1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.tile {
+    aspect-ratio: 1;
+    border: none;
+    border-radius: 15px;
+    background: linear-gradient(135deg,#845ec2,#d65db1);
+    color: white;
+    font-size: 30px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 5px 10px #0002;
+    transition: .2s;
+}
+
+.tile:hover:not(.empty) {
+    transform: scale(1.05);
+}
+
+.tile.empty {
+    background: #eee;
+    box-shadow: none;
+    cursor: default;
+}
+
+.buttons {
+    display: flex;
+    gap: 10px;
+}
+
+button.control {
+    flex: 1;
+    padding: 13px 8px;
+    border: none;
+    border-radius: 12px;
+    color: white;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: .2s;
+}
+
+button.control:hover {
+    transform: translateY(-3px);
+    opacity: .9;
+}
+
+.shuffle {
+    background: #ff8c42;
+}
+
+.restart {
+    background: #00b894;
+}
+
+.message {
+    margin-top: 18px;
+    font-weight: bold;
+    color: #764ba2;
+    min-height: 24px;
+}
+
+.instructions {
+    margin-top: 20px;
+    padding: 15px;
+    background: #f8f4ff;
+    border-radius: 15px;
+    text-align: left;
+    color: #555;
+    font-size: 14px;
+    line-height: 1.7;
+}
+
+.instructions h3 {
+    color: #764ba2;
+    margin-bottom: 5px;
+}
+
+@media(max-width:400px) {
+    .container {
+        padding: 16px;
+    }
+
+    .tile {
+        font-size: 25px;
+    }
+
+    button.control {
+        font-size: 12px;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>🧩 Puzzle Master</h1>
+    <p class="subtitle">Arrange numbers in the correct order!</p>
+
+    <div class="stats">
+        <div class="stat">
+            <h3 id="moves">0</h3>
+            <p>Moves</p>
+        </div>
+
+        <div class="stat">
+            <h3 id="time">0</h3>
+            <p>Seconds</p>
+        </div>
+
+        <div class="stat">
+            <h3 id="best">0</h3>
+            <p>Best Score</p>
+        </div>
+    </div>
+
+    <div class="board" id="board"></div>
+
+    <div class="buttons">
+        <button class="control shuffle" onclick="shuffleGame()">
+            🔀 Shuffle
+        </button>
+
+        <button class="control restart" onclick="restartGame()">
+            🔄 Restart
+        </button>
+    </div>
+
+    <div class="message" id="message">
+        Good luck! Let's play 🎮
+    </div>
+
+    <div class="instructions">
+        <h3>📖 How to Play?</h3>
+        <p>1. Arrange numbers from 1 to 8.</p>
+        <p>2. Click a number next to the empty box.</p>
+        <p>3. Move numbers into the empty space.</p>
+        <p>4. Complete the puzzle to win!</p>
+        <p>🏆 Fewer moves = Better Score!</p>
+    </div>
+
+</div>
+
+<script>
+
+const board = document.getElementById("board");
+
+let numbers = [];
+let moves = 0;
+let seconds = 0;
+let timer = null;
+let gameStarted = false;
+let gameWon = false;
+
+let bestScore = Number(localStorage.getItem("puzzleBest")) || 0;
+
+document.getElementById("best").textContent =
+    bestScore || "-";
+
+// Create board
+function renderBoard() {
+
+    board.innerHTML = "";
+
+    numbers.forEach((num,index) => {
+
+        const tile = document.createElement("button");
+
+        tile.className = "tile";
+
+        if(num === 0) {
+            tile.classList.add("empty");
+            tile.textContent = "";
+            tile.disabled = true;
+        } else {
+            tile.textContent = num;
+            tile.onclick = () => moveTile(index);
+            tile.setAttribute("aria-label","Move tile " + num);
+        }
+
+        board.appendChild(tile);
+    });
+
+}
+
+// Check whether two positions are next to each other
+function isAdjacent(index1,index2) {
+
+    const row1 = Math.floor(index1/3);
+    const col1 = index1%3;
+
+    const row2 = Math.floor(index2/3);
+    const col2 = index2%3;
+
+    return Math.abs(row1-row2) +
+           Math.abs(col1-col2) === 1;
+}
+
+// Move number
+function moveTile(index) {
+
+    if(gameWon) return;
+
+    const emptyIndex = numbers.indexOf(0);
+
+    if(!isAdjacent(index,emptyIndex)) return;
+
+    if(!gameStarted) {
+        startTimer();
+        gameStarted = true;
+    }
+
+    [numbers[index],numbers[emptyIndex]] =
+    [numbers[emptyIndex],numbers[index]];
+
+    moves++;
+
+    document.getElementById("moves").textContent = moves;
+
+    renderBoard();
+
+    checkWin();
+}
+
+// Start timer
+function startTimer() {
+
+    clearInterval(timer);
+
+    timer = setInterval(() => {
+
+        seconds++;
+
+        document.getElementById("time").textContent = seconds;
+
+    },1000);
+}
+
+// Check win
+function checkWin() {
+
+    const won = numbers.every((num,index) =>
+        num === (index === 8 ? 0 : index+1)
+    );
+
+    if(won) {
+
+        gameWon = true;
+
+        clearInterval(timer);
+
+        const score = Math.max(0,1000-moves*10-seconds);
+
+        document.getElementById("message").innerHTML =
+            "🎉 YOU WON! Score: " + score;
+
+        if(score > bestScore) {
+
+            bestScore = score;
+
+            localStorage.setItem("puzzleBest",bestScore);
+
+            document.getElementById("best").textContent =
+                bestScore;
+        }
+    }
+}
+
+// Shuffle board using valid moves
+function shuffleGame() {
+
+    clearInterval(timer);
+
+    numbers = [1,2,3,4,5,6,7,8,0];
+
+    let previousIndex = -1;
+
+    for(let i=0;i<200;i++) {
+
+        const emptyIndex = numbers.indexOf(0);
+
+        let possible = [];
+
+        for(let j=0;j<9;j++) {
+
+            if(isAdjacent(j,emptyIndex) &&
+               j !== previousIndex) {
+
+                possible.push(j);
+            }
+        }
+
+        const randomIndex =
+            possible[Math.floor(Math.random()*possible.length)];
+
+        [numbers[randomIndex],numbers[emptyIndex]] =
+        [numbers[emptyIndex],numbers[randomIndex]];
+
+        previousIndex = emptyIndex;
+    }
+
+    resetStats();
+
+    renderBoard();
+
+    document.getElementById("message").textContent =
+        "New puzzle! Start playing 🎮";
+}
+
+// Restart game
+function restartGame() {
+
+    clearInterval(timer);
+
+    numbers = [1,2,3,4,5,6,7,8,0];
+
+    resetStats();
+
+    renderBoard();
+
+    document.getElementById("message").textContent =
+        "Game restarted! Press Shuffle to play.";
+}
+
+// Reset statistics
+function resetStats() {
+
+    moves = 0;
+    seconds = 0;
+    gameStarted = false;
+    gameWon = false;
+
+    document.getElementById("moves").textContent = 0;
+    document.getElementById("time").textContent = 0;
+
+}
+
+// Start game
+shuffleGame();
+
+</script>
+
+</body>
+</html>
